@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Verificar que se proporcionen dos argumentos
+# Verifica si se proporcionan los argumentos correctos
 if [ "$#" -ne 2 ]; then
     echo "Uso: $0 <directorio_origen> <directorio_destino>"
     exit 1
@@ -9,30 +9,28 @@ fi
 SRC_DIR=$1
 DEST_DIR=$2
 
-# Crear un directorio temporal para la copia modificada
-TEMP_DIR=$(mktemp -d)
-
-# Copiar todo el contenido al directorio temporal
-cp -a "$SRC_DIR/." "$TEMP_DIR/"
-
-# Convertir symlinks a archivos regulares en el directorio temporal
-find "$TEMP_DIR" -type l -print0 | while IFS= read -r -d $'\0' link; do
-    target=$(readlink -f "$link")  # Obtener el destino absoluto del enlace
-    if [ -f "$target" ]; then
-        cp --remove-destination "$target" "$link"
-        echo "Reemplazado: $link -> $target"
-    else
-        echo "El archivo objetivo no existe: $target"
-    fi
-done
-
 # Crear el directorio de destino si no existe
 mkdir -p "$DEST_DIR"
 
-# Copiar el directorio temporal al destino
-cp -a "$TEMP_DIR/." "$DEST_DIR/"
+# Función para procesar cada subdirectorio
+process_directory() {
+    local dir=$1
+    echo "Procesando directorio: $dir"
 
-# Limpiar el directorio temporal
-rm -rf "$TEMP_DIR"
+    # Verificar si el directorio contiene un repositorio de Git
+    if [ -d "$dir/.git" ]; then
+        echo "Encontrado repositorio de Git en $dir, eliminando .git..."
+        rm -rf "$dir/.git"  # Elimina la carpeta .git para desvincular el repositorio
+    fi
+}
 
-echo "Operación completada. Directorio copiado de '$SRC_DIR' a '$DEST_DIR'."
+# Exportar la función para que sea visible en subshells
+export -f process_directory
+
+# Buscar todos los directorios en el directorio de origen y procesarlos
+find "$SRC_DIR" -type d -print0 | xargs -0 -I {} bash -c 'process_directory "$@"' _ {}
+
+# Copiar todo desde el directorio origen al directorio destino
+cp -a "$SRC_DIR/." "$DEST_DIR/"
+
+echo "Todos los datos han sido copiados de '$SRC_DIR' a '$DEST_DIR'."
