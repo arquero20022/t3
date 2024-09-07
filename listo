@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Verifica si se proporcionan los argumentos correctos
+# Verificar que se proporcionan dos argumentos
 if [ "$#" -ne 2 ]; then
     echo "Uso: $0 <directorio_origen> <directorio_destino>"
     exit 1
@@ -9,28 +9,36 @@ fi
 SRC_DIR=$1
 DEST_DIR=$2
 
-# Crear el directorio de destino si no existe
-mkdir -p "$DEST_DIR"
-
 # Función para procesar cada subdirectorio
 process_directory() {
     local dir=$1
-    echo "Procesando directorio: $dir"
+    echo "Procesando: $dir"
 
-    # Verificar si el directorio contiene un repositorio de Git
+    # Convertir enlaces simbólicos en archivos/carpetas reales
+    find "$dir" -type l -print0 | while IFS= read -r -d $'\0' symlink; do
+        local target=$(readlink -f "$symlink")
+        echo "Reemplazando enlace simbólico $symlink con su destino $target"
+        rm "$symlink"
+        cp -a "$target" "$symlink"
+    done
+
+    # Verificar si el directorio es un repositorio Git
     if [ -d "$dir/.git" ]; then
-        echo "Encontrado repositorio de Git en $dir, eliminando .git..."
-        rm -rf "$dir/.git"  # Elimina la carpeta .git para desvincular el repositorio
+        echo "Eliminando datos de Git en $dir"
+        rm -rf "$dir/.git"
     fi
 }
 
 # Exportar la función para que sea visible en subshells
 export -f process_directory
 
-# Buscar todos los directorios en el directorio de origen y procesarlos
-find "$SRC_DIR" -type d -print0 | xargs -0 -I {} bash -c 'process_directory "$@"' _ {}
+# Procesar el directorio origen y todos los subdirectorios recursivamente
+find "$SRC_DIR" -type d -print0 | while IFS= read -r -d $'\0' subdir; do
+    process_directory "$subdir"
+done
 
 # Copiar todo desde el directorio origen al directorio destino
+echo "Copiando desde $SRC_DIR a $DEST_DIR"
 cp -a "$SRC_DIR/." "$DEST_DIR/"
 
-echo "Todos los datos han sido copiados de '$SRC_DIR' a '$DEST_DIR'."
+echo "Operación completada. Todos los datos han sido copiados a '$DEST_DIR'."
